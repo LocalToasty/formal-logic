@@ -6,6 +6,7 @@ module Logic.Propositional
 , depth
 , vars
 , satisfiable, satisfying, tautology
+, dnf
 ) where
 
 -- | Data type for propositions.
@@ -86,3 +87,18 @@ interp 0 = []
 interp 1 = [[False],[True]]
 interp n = (map (False:) prev) ++ (map (True:) prev)
   where prev = interp $ n - 1
+
+-- | Converts a interpretation into a conjunctive term.
+conjunction :: [Bool] -> Proposition
+conjunction xs = case literals of
+                   []   -> Val False
+                   p:ps -> foldl And p ps
+  where vars = map X [0..length xs]
+        literals = zipWith (\b x -> if b then x else Not x) xs vars
+
+-- | Converts a proposition into its disjunctive normal form.
+dnf :: Proposition -> Proposition
+dnf p = case terms of
+          []   -> Val False
+          q:qs -> foldl Or q qs
+  where terms = map conjunction $ satisfying p
