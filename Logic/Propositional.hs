@@ -22,24 +22,20 @@ data Proposition
 
 instance Show Proposition where
   -- | Converts a proposition into a readable string.
+  show (Val False)         = "0"
+  show (Val True)          = "1"
+  show (Var name)          = name
+  show (Not p@(_ `And` _)) = "!(" ++ show p ++ ")"
+  show (Not p@(_ `Or` _))  = "!(" ++ show p ++ ")"
   show (Not p)     = "!" ++ show p
-  show (p `And` q) = lhs ++ " & " ++ rhs
-    where lhs = case p of
-                  (Or _ _) -> "(" ++ show p ++ ")"
-                  _        -> show p
-          rhs = case q of
-                  (Or _ _) -> "(" ++ show q ++ ")"
-                  _        -> show q
-  show (p `Or` q) = lhs ++ " | " ++ rhs
-    where lhs = case p of
-                  (And _ _) -> "(" ++ show p ++ ")"
-                  _         -> show p
-          rhs = case q of
-                  (And _ _) -> "(" ++ show q ++ ")"
-                  _         -> show q
-  show (Val False) = "0"
-  show (Val True)  = "1"
-  show (Var name)  = name
+  show (p `And` q) = decorate p ++ " & " ++ decorate q
+    where decorate p = case p of
+                         (Or _ _) -> "(" ++ show p ++ ")"
+                         _        -> show p
+  show (p `Or` q) = decorate p ++ " | " ++ decorate q
+    where decorate p = case p of
+                         (And _ _) -> "(" ++ show p ++ ")"
+                         _         -> show p
 
 -- Helper functions to make construction of propositions easier
 (&) = And                               -- ^ and
