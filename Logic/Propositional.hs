@@ -56,6 +56,17 @@ eval (Not p)     vars = not <$> eval p vars
 eval (p `And` q) vars = (&&) <$> eval p vars <*> eval q vars
 eval (p `Or` q)  vars = (||) <$> eval p vars <*> eval q vars
 
+-- | Replaces all occurrences of a variable to a boolean value.
+apply :: Proposition -> (String,Bool) -> Proposition
+apply p@(Var name) (var,val) | name == var = Val val
+                             | otherwise   = p
+apply (Not p)      var = Not $ p ! var
+apply (p `And` q)  var = (p ! var) & (q ! var)
+apply (p `Or` q)   var = (p ! var) <|> (q ! var)
+apply p            _   = p
+
+(!) = apply
+
 -- | Checks if two propositions are equivalent.
 equiv :: Proposition -> Proposition -> Bool
 equiv p q = all (\x -> eval p x == eval q x) $ interps $ p & q
@@ -104,6 +115,8 @@ boolLists n = (map (False:) prev) ++ (map (True:) prev)
   where prev = boolLists $ n - 1
 
 -- | Converts a interpretation into a conjunctive term.
+-- The conjunctive term evaluates to true for the given interpretation,
+-- false otherwise.
 conjunction :: Interpretation -> Proposition
 conjunction i = case literals of
                   []   -> Val False
