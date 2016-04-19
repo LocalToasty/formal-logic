@@ -125,9 +125,23 @@ conjunction i = case literals of
         toTerm (name,True)  = Var name
         toTerm (name,False) = Not $ Var name
 
+disjunction :: Interpretation -> Proposition
+disjunction i = case literals of
+                  []   -> Val False
+                  p:ps -> foldl Or p ps
+  where literals = map toTerm i
+        toTerm (name,True)  = Not $ Var name
+        toTerm (name,False) = Var name
+
 -- | Converts a proposition into its disjunctive normal form.
 dnf :: Proposition -> Proposition
 dnf p = case terms of
           []   -> Val False
           q:qs -> foldl Or q qs
   where terms = map conjunction $ satisfying p
+
+cnf :: Proposition -> Proposition
+cnf p = case terms of
+          []   -> Val True
+          q:qs -> foldl And q qs
+  where terms = map disjunction $ satisfying $ Not p
