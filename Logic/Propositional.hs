@@ -1,17 +1,20 @@
 module Logic.Propositional
-( Proposition(Val, X, Not, And, Or)
+( Proposition(Val, Var, Not, And, Or)
 , (&), (<|>), (-->), (<->), (</>)
 , eval
 , equiv
 , depth
-, vars
+, varNames
 , satisfiable, satisfying, tautology
+, dnf
 ) where
+
+import Data.List (union)
 
 -- | Data type for propositions.
 data Proposition
   = Val Bool                     -- ^ boolean value
-  | X   Int                      -- ^ boolean variable
+  | Var String                   -- ^ boolean variable
   | Not Proposition              -- ^ negation
   | And Proposition Proposition  -- ^ conjunction
   | Or  Proposition Proposition  -- ^ disjunction
@@ -19,12 +22,20 @@ data Proposition
 
 instance Show Proposition where
   -- | Converts a proposition into a readable string.
-  show (Val False)    = "0"
-  show (Val True)     = "1"
-  show (X i)          = "X" ++ show i
-  show (Not p)        = "!" ++ show p
-  show (p `And` q)    = "(" ++ show p ++ " & " ++ show q ++ ")"
-  show (p `Or` q)     = "(" ++ show p ++ " | " ++ show q ++ ")"
+  show (Val False)         = "0"
+  show (Val True)          = "1"
+  show (Var name)          = name
+  show (Not p@(_ `And` _)) = "!(" ++ show p ++ ")"
+  show (Not p@(_ `Or` _))  = "!(" ++ show p ++ ")"
+  show (Not p)     = "!" ++ show p
+  show (p `And` q) = decorate p ++ " & " ++ decorate q
+    where decorate p = case p of
+                         (Or _ _) -> "(" ++ show p ++ ")"
+                         _        -> show p
+  show (p `Or` q) = decorate p ++ " | " ++ decorate q
+    where decorate p = case p of
+                         (And _ _) -> "(" ++ show p ++ ")"
+                         _         -> show p
 
 -- Helper functions to make construction of propositions easier
 (&) = And                               -- ^ and
@@ -33,18 +44,21 @@ p --> q = Not p `Or` q                  -- ^ implies
 p <-> q = (p --> q) & (q --> p)         -- ^ equivalent
 p </> q = (p & Not q) `Or` (Not p & q)  -- ^ xor
 
+-- | An interpretation is a mapping from variables to boolean values.
+type Interpretation = [(String,Bool)]
+
 -- | Evaluates a proposition.
-eval :: Proposition -> [Bool] -> Bool
-eval (Val v)      xs = v
-eval (X i)        xs = xs !! i
-eval (Not p)      xs = not $ eval p xs
-eval (p `And` q)  xs = eval p xs && eval q xs
-eval (p `Or` q)   xs = eval p xs || eval q xs
+-- If the given interpretation isn't fitting, Nothing is returned.
+eval :: Proposition -> Interpretation -> Maybe Bool
+eval (Val v)     vars = Just v
+eval (Var name)  vars = lookup name vars
+eval (Not p)     vars = not <$> eval p vars
+eval (p `And` q) vars = (&&) <$> eval p vars <*> eval q vars
+eval (p `Or` q)  vars = (||) <$> eval p vars <*> eval q vars
 
 -- | Checks if two propositions are equivalent.
 equiv :: Proposition -> Proposition -> Bool
-equiv p q = all (\x -> eval p x == eval q x) interps
-  where interps = interp $ max (vars p) (vars q)
+equiv p q = all (\x -> eval p x == eval q x) $ interps $ p & q
 
 -- | Determines the depth of a proposition.
 -- Atomic propositions (i.e. values, variables) are considered to have a
@@ -52,37 +66,55 @@ equiv p q = all (\x -> eval p x == eval q x) interps
 -- subpropositions.
 depth :: Proposition -> Int
 depth (Val _)     = 0
-depth (X _)       = 0
+depth (Var _)     = 0
 depth (Not p)     = depth p + 1
 depth (p `And` q) = max (depth p) (depth q) + 1
 depth (p `Or` q)  = max (depth p) (depth q) + 1
 
--- | Determines the number of variables in a proposition.
-vars :: Proposition -> Int
-vars (X i)        = i + 1
-vars (Not  p)     = vars p
-vars (p `And` q)  = max (vars p) (vars q)
-vars (p `Or` q)   = max (vars p) (vars q)
-vars _            = 0
+-- | Determines the variables in a proposition.
+varNames :: Proposition -> [String]
+varNames (Var name)  = [name]
+varNames (Not p)     = varNames p
+varNames (p `And` q) = (varNames p) `union` (varNames q)
+varNames (p `Or` q)  = (varNames p) `union` (varNames q)
+varNames _           = []
 
 -- | Checks if a proposition is satisfiable.
 satisfiable :: Proposition -> Bool
-satisfiable p = any (eval p) interps
-  where interps = interp $ vars p
+satisfiable p = any ((== Just True) . eval p) $ interps p
 
 -- | Generates all sarisfying interpretations for a proposition.
-satisfying :: Proposition -> [[Bool]]
-satisfying p = filter (eval p) interps
-  where interps = interp $ vars p
+satisfying :: Proposition -> [Interpretation]
+satisfying p = filter ((== Just True) . eval p) $ interps p
 
 -- | Checks if a proposition is a tautology.
 tautology :: Proposition -> Bool
-tautology p = all (eval p) interps
-  where interps = interp $ vars p
+tautology p = all ((Just True ==) . eval p) $ interps p
 
--- | Generates all possible interpretations.
-interp :: Int -> [[Bool]]
-interp 0 = []
-interp 1 = [[False],[True]]
-interp n = (map (False:) prev) ++ (map (True:) prev)
-  where prev = interp $ n - 1
+-- | Generates all fitting interpretations.
+interps :: Proposition -> [Interpretation]
+interps p = map (zip vars) $ boolLists $ length vars
+  where vars = varNames p
+
+-- | Generates all possible lists of n booleans.
+boolLists :: Int -> [[Bool]]
+boolLists 0 = []
+boolLists 1 = [[False],[True]]
+boolLists n = (map (False:) prev) ++ (map (True:) prev)
+  where prev = boolLists $ n - 1
+
+-- | Converts a interpretation into a conjunctive term.
+conjunction :: Interpretation -> Proposition
+conjunction i = case literals of
+                  []   -> Val False
+                  p:ps -> foldl And p ps
+  where literals = map toTerm i
+        toTerm (name,True)  = Var name
+        toTerm (name,False) = Not $ Var name
+
+-- | Converts a proposition into its disjunctive normal form.
+dnf :: Proposition -> Proposition
+dnf p = case terms of
+          []   -> Val False
+          q:qs -> foldl Or q qs
+  where terms = map conjunction $ satisfying p
