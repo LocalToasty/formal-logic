@@ -6,10 +6,11 @@ module Logic.Propositional
 , depth
 , varNames
 , satisfiable, satisfying, tautology
-, dnf
+, dnf, cnf
 ) where
 
 import Data.List (union)
+import Data.Maybe (fromJust)
 
 -- | Data type for propositions.
 data Proposition
@@ -56,7 +57,7 @@ eval (Not p)     vars = not <$> eval p vars
 eval (p `And` q) vars = (&&) <$> eval p vars <*> eval q vars
 eval (p `Or` q)  vars = (||) <$> eval p vars <*> eval q vars
 
--- | Replaces all occurrences of a variable to a boolean value.
+-- | Replaces all occurrences of a variable with a boolean value.
 apply :: Proposition -> (String,Bool) -> Proposition
 apply p@(Var name) (var,val) | name == var = Val val
                              | otherwise   = p
@@ -92,7 +93,8 @@ varNames _           = []
 
 -- | Checks if a proposition is satisfiable.
 satisfiable :: Proposition -> Bool
-satisfiable p = any ((== Just True) . eval p) $ interps p
+satisfiable p | varNames p == [] = fromJust $ eval p []
+              | otherwise        = any ((== Just True) . eval p) $ interps p
 
 -- | Generates all sarisfying interpretations for a proposition.
 satisfying :: Proposition -> [Interpretation]
@@ -100,7 +102,8 @@ satisfying p = filter ((== Just True) . eval p) $ interps p
 
 -- | Checks if a proposition is a tautology.
 tautology :: Proposition -> Bool
-tautology p = all ((Just True ==) . eval p) $ interps p
+tautology p | varNames p == [] = fromJust $ eval p []
+            | otherwise        = all ((Just True ==) . eval p) $ interps p
 
 -- | Generates all fitting interpretations.
 interps :: Proposition -> [Interpretation]
@@ -135,13 +138,15 @@ disjunction i = case literals of
 
 -- | Converts a proposition into its disjunctive normal form.
 dnf :: Proposition -> Proposition
-dnf p = case terms of
-          []   -> Val False
-          q:qs -> foldl Or q qs
-  where terms = map conjunction $ satisfying p
+dnf p | varNames p == [] = Val $ fromJust $ eval p []
+      | otherwise        = case terms of
+                             []   -> Val False
+                             q:qs -> foldl Or q qs
+      where terms = map conjunction $ satisfying p
 
 cnf :: Proposition -> Proposition
-cnf p = case terms of
-          []   -> Val True
-          q:qs -> foldl And q qs
-  where terms = map disjunction $ satisfying $ Not p
+cnf p | varNames p == [] = Val $ fromJust $ eval p []
+      | otherwise        = case terms of
+                             []   -> Val True
+                             q:qs -> foldl And q qs
+      where terms = map disjunction $ satisfying $ Not p
