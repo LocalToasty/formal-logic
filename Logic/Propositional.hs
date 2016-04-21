@@ -7,6 +7,7 @@ module Logic.Propositional
 , varNames
 , satisfiable, satisfying, tautology
 , dnf, cnf
+, isDnf, isCnf
 ) where
 
 import Data.List (union)
@@ -150,3 +151,29 @@ cnf p | varNames p == [] = Val $ fromJust $ eval p []
                              []   -> Val True
                              q:qs -> foldl And q qs
       where terms = map disjunction $ satisfying $ Not p
+
+-- / Checks if proposition is in disjunctive form.
+isDnf :: Proposition -> Bool
+isDnf (Val _)    = True
+isDnf p          = isInnerDnf p
+  where isInnerDnf (p `Or` q) = isInnerDnf p && isInnerDnf q
+        isInnerDnf p          = isConjunction p
+
+isConjunction :: Proposition -> Bool
+isConjunction (p `And` q)   = isConjunction p && isConjunction q
+isConjunction (Not (Var _)) = True
+isConjunction (Var _)       = True
+isConjunction _             = False
+
+-- / Checks if proposition is in conjunctive form.
+isCnf :: Proposition -> Bool
+isCnf (Val _)    = True
+isCnf p          = isInnerCnf p
+  where isInnerCnf (p `And` q) = isInnerCnf p && isInnerCnf q
+        isInnerCnf p           = isDisjunction p
+
+isDisjunction :: Proposition -> Bool
+isDisjunction (p `Or` q)    = isConjunction p && isConjunction q
+isDisjunction (Not (Var _)) = True
+isDisjunction (Var _)       = True
+isDisjunction _             = False
